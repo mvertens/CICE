@@ -306,6 +306,10 @@ contains
     real(dbl_kind)              :: max_med2mod_areacor_glob
     real(dbl_kind)              :: min_mod2med_areacor_glob
     real(dbl_kind)              :: min_med2mod_areacor_glob
+    logical                     :: isPresent, isSet
+    character(len=char_len_long):: cvalue
+    character(len=char_len_long):: mesh_atm
+    character(len=char_len_long):: mesh_ice
     character(len=*), parameter :: subname='(ice_import_export:realize_fields)'
     !---------------------------------------------------------------------------
 
@@ -340,39 +344,58 @@ contains
 
     call ESMF_MeshGet(mesh, numOwnedElements=numOwnedElements, rc=rc)
     if (chkerr(rc,__LINE__,u_FILE_u)) return
-    call ESMF_StateGet(exportState, itemName=trim(fldsFrIce(2)%stdname), field=lfield, rc=rc)
-    if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    call ESMF_FieldRegridGetArea(lfield, rc=rc)
-    if (chkerr(rc,__LINE__,u_FILE_u)) return
-    call ESMF_FieldGet(lfield, farrayPtr=dataptr, rc=rc)
-    if (chkerr(rc,__LINE__,u_FILE_u)) return
-    allocate(mesh_areas(numOwnedElements))
-    mesh_areas(:) = dataptr(:)
-
     ! Determine flux correction factors (module variables)
-    allocate(model_areas(numOwnedElements))
     allocate(mod2med_areacor(numOwnedElements))
     allocate(med2mod_areacor(numOwnedElements))
     mod2med_areacor(:) = 1._dbl_kind
     med2mod_areacor(:) = 1._dbl_kind
-    n = 0
-    do iblk = 1, nblocks
-       this_block = get_block(blocks_ice(iblk),iblk)
-       ilo = this_block%ilo
-       ihi = this_block%ihi
-       jlo = this_block%jlo
-       jhi = this_block%jhi
-       do j = jlo, jhi
-          do i = ilo, ihi
-             n = n+1
-             model_areas(n) = tarea(i,j,iblk)/(radius*radius)
-             mod2med_areacor(n) = model_areas(n) / mesh_areas(n)
-             med2mod_areacor(n) = mesh_areas(n) / model_areas(n)
+
+    call NUOPC_CompAttributeGet(gcomp, name='mesh_atm', value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (isPresent .and. isSet) then
+       mesh_atm = trim(cvalue)
+    else
+       mesh_atm = 'unset_mesh_atm'
+    end if
+    call NUOPC_CompAttributeGet(gcomp, name='mesh_ice', value=cvalue, isPresent=isPresent, isSet=isSet, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (isPresent .and. isSet) then
+       mesh_ice = trim(cvalue)
+    else
+       mesh_ice = 'unset_mesh_ice'
+    end if
+
+    ! flux correction factors are only set if the atm and ice meshes are different
+    ! this is needed in order for single column mode to work correctly
+    if (trim(mesh_atm) /= trim(mesh_ice)) then
+       call ESMF_StateGet(exportState, itemName=trim(fldsFrIce(2)%stdname), field=lfield, rc=rc)
+       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+       call ESMF_FieldRegridGetArea(lfield, rc=rc)
+       if (chkerr(rc,__LINE__,u_FILE_u)) return
+       call ESMF_FieldGet(lfield, farrayPtr=dataptr, rc=rc)
+       if (chkerr(rc,__LINE__,u_FILE_u)) return
+       allocate(mesh_areas(numOwnedElements))
+       mesh_areas(:) = dataptr(:)
+       allocate(model_areas(numOwnedElements))
+       n = 0
+       do iblk = 1, nblocks
+          this_block = get_block(blocks_ice(iblk),iblk)
+          ilo = this_block%ilo
+          ihi = this_block%ihi
+          jlo = this_block%jlo
+          jhi = this_block%jhi
+          do j = jlo, jhi
+             do i = ilo, ihi
+                n = n+1
+                model_areas(n) = tarea(i,j,iblk)/(radius*radius)
+                mod2med_areacor(n) = model_areas(n) / mesh_areas(n)
+                med2mod_areacor(n) = mesh_areas(n) / model_areas(n)
+             enddo
           enddo
        enddo
-    enddo
-    deallocate(model_areas)
-    deallocate(mesh_areas)
+       deallocate(model_areas)
+       deallocate(mesh_areas)
+    end if
 
     min_mod2med_areacor = minval(mod2med_areacor)
     max_mod2med_areacor = maxval(mod2med_areacor)
