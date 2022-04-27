@@ -3,7 +3,7 @@ module ice_import_export
   use ESMF
   use NUOPC
   use NUOPC_Model
-  use ice_kinds_mod      , only : int_kind, dbl_kind, char_len, log_kind
+  use ice_kinds_mod      , only : int_kind, dbl_kind, char_len, char_len_long, log_kind
   use ice_constants      , only : c0, c1, spval_dbl, radius
   use ice_constants      , only : field_loc_center, field_type_scalar, field_type_vector
   use ice_blocks         , only : block, get_block, nx_block, ny_block
